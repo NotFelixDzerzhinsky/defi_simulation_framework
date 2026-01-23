@@ -9,6 +9,9 @@ pub enum AppError {
     #[error("{0}")]
     Validation(String),
 
+    #[error("backend error: {0}")]
+    Backend(String),
+
     #[error("failed to read file `{path}`: {source}")]
     ReadFile {
         path: PathBuf,
@@ -30,5 +33,9 @@ pub enum AppError {
 impl AppError {
     pub fn validation(message: impl Into<String>) -> Self {
         Self::Validation(message.into())
+    }
+
+    pub fn backend(message: impl Into<String>) -> Self {
+        Self::Backend(message.into())
     }
 }
