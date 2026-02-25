@@ -10,5 +10,7 @@ fn cli_help_lists_required_arguments() {
         .assert()
         .success()
         .stdout(predicate::str::contains("--dex"))
-        .stdout(predicate::str::contains("--history"));
+        .stdout(predicate::str::contains("--history"))
+        .stdout(predicate::str::contains("--backend"))
+        .stdout(predicate::str::contains("--output-dir"));
 }
