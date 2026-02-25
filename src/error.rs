@@ -19,6 +19,13 @@ pub enum AppError {
         source: std::io::Error,
     },
 
+    #[error("failed to write file `{path}`: {source}")]
+    WriteFile {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("failed to parse TOML file `{path}`: {source}")]
     TomlParse {
         path: PathBuf,
