@@ -42,6 +42,20 @@ pub struct TokenConfig {
 }
 
 impl DexConfig {
+    pub fn resolve_relative_paths(&mut self, base_dir: &std::path::Path) {
+        if let Some(abi_dir) = &mut self.assets.abi_dir {
+            if abi_dir.is_relative() {
+                *abi_dir = base_dir.join(&*abi_dir);
+            }
+        }
+
+        if let Some(artifacts_dir) = &mut self.assets.artifacts_dir {
+            if artifacts_dir.is_relative() {
+                *artifacts_dir = base_dir.join(&*artifacts_dir);
+            }
+        }
+    }
+
     pub fn validate(&self) -> AppResult<()> {
         require_non_empty("dex.name", &self.name)?;
         require_non_empty("dex.adapter", &self.adapter)?;

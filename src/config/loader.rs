@@ -24,13 +24,21 @@ pub fn load_runtime_configs(
 }
 
 pub fn load_dex_config(path: impl AsRef<Path>) -> AppResult<DexConfig> {
-    let config: DexConfig = load_toml(path)?;
+    let path = path.as_ref();
+    let mut config: DexConfig = load_toml(path)?;
+    if let Some(base_dir) = path.parent() {
+        config.resolve_relative_paths(base_dir);
+    }
     config.validate()?;
     Ok(config)
 }
 
 pub fn load_history_config(path: impl AsRef<Path>) -> AppResult<HistoryConfig> {
-    let config: HistoryConfig = load_toml(path)?;
+    let path = path.as_ref();
+    let mut config: HistoryConfig = load_toml(path)?;
+    if let Some(base_dir) = path.parent() {
+        config.resolve_relative_paths(base_dir);
+    }
     config.validate()?;
     Ok(config)
 }

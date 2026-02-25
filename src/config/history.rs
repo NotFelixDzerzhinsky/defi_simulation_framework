@@ -47,6 +47,24 @@ impl Default for ExecutionConfig {
 }
 
 impl HistoryConfig {
+    pub fn resolve_relative_paths(&mut self, base_dir: &std::path::Path) {
+        match &mut self.source {
+            HistorySourceConfig::Jsonl { path } => {
+                if path.is_relative() {
+                    *path = base_dir.join(&*path);
+                }
+            }
+            HistorySourceConfig::RpcRange { rpc_url, .. } => {
+                if !rpc_url.starts_with("http://")
+                    && !rpc_url.starts_with("https://")
+                    && !rpc_url.starts_with("file://")
+                {
+                    *rpc_url = base_dir.join(rpc_url.as_str()).display().to_string();
+                }
+            }
+        }
+    }
+
     pub fn validate(&self) -> AppResult<()> {
         if let Some(name) = &self.name {
             if name.trim().is_empty() {
