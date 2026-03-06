@@ -1,8 +1,18 @@
-use std::fs;
+use std::{fs, process::Command as ProcessCommand};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::tempdir;
+
+use dex_sim::backend::{AnvilBackend, EvmBackend, TxRequest};
+
+fn has_anvil() -> bool {
+    ProcessCommand::new("anvil")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
 
 #[test]
 fn e2e_jsonl_run_with_mock_backend_writes_outputs() {
@@ -222,6 +232,144 @@ continue_on_revert = true
         .failure()
         .stderr(predicate::str::contains("token_out"))
         .stderr(predicate::str::contains("is not listed in dex config"));
+}
+
+#[test]
+fn e2e_rpc_range_run_with_live_anvil_source_writes_outputs() {
+    if !has_anvil() {
+        return;
+    }
+
+    let router = "0x1111111111111111111111111111111111111111";
+    let mut source_chain = AnvilBackend::spawn().expect("anvil backend should start");
+
+    source_chain
+        .send_tx(TxRequest {
+            to: router.to_string(),
+            data: b"swap_exact_input|sender=0xaaaa|token_in=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|token_out=0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|amount_in=100|min_amount_out=91".to_vec(),
+            value: 0,
+        })
+        .expect("first tx should succeed");
+    source_chain
+        .send_tx(TxRequest {
+            to: router.to_string(),
+            data: b"swap_exact_input|sender=0xbbbb|token_in=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|token_out=0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb|amount_in=200|min_amount_out=181".to_vec(),
+            value: 0,
+        })
+        .expect("second tx should succeed");
+
+    let tempdir = tempdir().expect("tempdir should be created");
+    let dex_path = tempdir.path().join("dex.toml");
+    let history_path = tempdir.path().join("history.toml");
+    let output_dir = tempdir.path().join("out");
+
+    fs::write(&dex_path, sample_builtin_dex_toml()).expect("dex config should be written");
+    fs::write(
+        &history_path,
+        format!(
+            r#"
+[source]
+kind = "rpc_range"
+rpc_url = "{}"
+start_block = 1
+end_block = 2
+contract_address = "{}"
+method = "swap_exact_input"
+
+[execution]
+mine_after_block = true
+continue_on_revert = true
+"#,
+            source_chain.rpc_url(),
+            router
+        ),
+    )
+    .expect("history config should be written");
+
+    let mut command = Command::cargo_bin("dex-sim").expect("binary should build");
+    command
+        .args([
+            "--dex",
+            &dex_path.display().to_string(),
+            "--history",
+            &history_path.display().to_string(),
+            "--backend",
+            "mock",
+            "--output-dir",
+            &output_dir.display().to_string(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("history_source=`rpc_range`"))
+        .stdout(predicate::str::contains("processed_blocks=2"))
+        .stdout(predicate::str::contains("total_swaps=2"));
+
+    let summary_output =
+        fs::read_to_string(output_dir.join("run.summary.txt")).expect("summary should exist");
+    let raw_output =
+        fs::read_to_string(output_dir.join("run.raw.jsonl")).expect("raw output should exist");
+
+    assert!(summary_output.contains("processed_blocks=2"));
+    assert!(summary_output.contains("successes=2"));
+    assert_eq!(raw_output.lines().count(), 2);
+}
+
+#[test]
+fn e2e_rpc_range_run_fails_with_clear_error_for_bad_live_payload() {
+    if !has_anvil() {
+        return;
+    }
+
+    let router = "0x1111111111111111111111111111111111111111";
+    let mut source_chain = AnvilBackend::spawn().expect("anvil backend should start");
+
+    source_chain
+        .send_tx(TxRequest {
+            to: router.to_string(),
+            data: b"broken-rpc-payload".to_vec(),
+            value: 0,
+        })
+        .expect("tx should succeed");
+
+    let tempdir = tempdir().expect("tempdir should be created");
+    let dex_path = tempdir.path().join("dex.toml");
+    let history_path = tempdir.path().join("history.toml");
+    let output_dir = tempdir.path().join("out");
+
+    fs::write(&dex_path, sample_builtin_dex_toml()).expect("dex config should be written");
+    fs::write(
+        &history_path,
+        format!(
+            r#"
+[source]
+kind = "rpc_range"
+rpc_url = "{}"
+start_block = 1
+end_block = 1
+contract_address = "{}"
+method = "swap_exact_input"
+"#,
+            source_chain.rpc_url(),
+            router
+        ),
+    )
+    .expect("history config should be written");
+
+    let mut command = Command::cargo_bin("dex-sim").expect("binary should build");
+    command
+        .args([
+            "--dex",
+            &dex_path.display().to_string(),
+            "--history",
+            &history_path.display().to_string(),
+            "--backend",
+            "mock",
+            "--output-dir",
+            &output_dir.display().to_string(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("failed to decode swap payload"));
 }
 
 fn sample_builtin_dex_toml() -> &'static str {
