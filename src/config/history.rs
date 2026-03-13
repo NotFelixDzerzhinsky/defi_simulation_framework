@@ -27,6 +27,12 @@ pub enum HistorySourceConfig {
         #[serde(default)]
         method: Option<String>,
     },
+    ForkReplay {
+        rpc_url: String,
+        start_block: u64,
+        end_block: u64,
+        router_address: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +68,8 @@ impl HistoryConfig {
                     *rpc_url = base_dir.join(rpc_url.as_str()).display().to_string();
                 }
             }
+            // ForkReplay always uses an HTTP URL — nothing to resolve.
+            HistorySourceConfig::ForkReplay { .. } => {}
         }
     }
 
@@ -83,6 +91,7 @@ impl HistorySourceConfig {
         match self {
             Self::Jsonl { .. } => "jsonl",
             Self::RpcRange { .. } => "rpc_range",
+            Self::ForkReplay { .. } => "fork_replay",
         }
     }
 
@@ -113,6 +122,27 @@ impl HistorySourceConfig {
 
                 if let Some(method) = method {
                     require_non_empty("history.source.method", method)?;
+                }
+            }
+            Self::ForkReplay {
+                rpc_url,
+                start_block,
+                end_block,
+                router_address,
+            } => {
+                require_non_empty("history.source.rpc_url", rpc_url)?;
+                require_non_empty("history.source.router_address", router_address)?;
+
+                if !rpc_url.starts_with("http://") && !rpc_url.starts_with("https://") {
+                    return Err(AppError::validation(
+                        "history.source.rpc_url for fork_replay must start with http:// or https://",
+                    ));
+                }
+
+                if start_block > end_block {
+                    return Err(AppError::validation(format!(
+                        "history.source.start_block ({start_block}) must be <= history.source.end_block ({end_block})"
+                    )));
                 }
             }
         }

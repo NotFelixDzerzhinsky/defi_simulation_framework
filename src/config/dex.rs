@@ -9,6 +9,10 @@ pub struct DexConfig {
     pub name: String,
     pub adapter: String,
     pub contracts: DexContracts,
+    /// Fee in basis points (1 bps = 0.01%). E.g. 30 = 0.3% (Uniswap V2 standard).
+    /// Used to compute `fee_amount` per swap and accumulate `total_fees` in the run summary.
+    #[serde(default)]
+    pub fee_bps: Option<u64>,
     #[serde(default)]
     pub assets: DexAssets,
     #[serde(default)]
@@ -29,8 +33,6 @@ pub struct DexContracts {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DexAssets {
     #[serde(default)]
-    pub abi_dir: Option<PathBuf>,
-    #[serde(default)]
     pub artifacts_dir: Option<PathBuf>,
 }
 
@@ -43,12 +45,6 @@ pub struct TokenConfig {
 
 impl DexConfig {
     pub fn resolve_relative_paths(&mut self, base_dir: &std::path::Path) {
-        if let Some(abi_dir) = &mut self.assets.abi_dir {
-            if abi_dir.is_relative() {
-                *abi_dir = base_dir.join(&*abi_dir);
-            }
-        }
-
         if let Some(artifacts_dir) = &mut self.assets.artifacts_dir {
             if artifacts_dir.is_relative() {
                 *artifacts_dir = base_dir.join(&*artifacts_dir);
@@ -61,16 +57,20 @@ impl DexConfig {
         require_non_empty("dex.adapter", &self.adapter)?;
         require_non_empty("dex.contracts.router", &self.contracts.router)?;
 
+        if let Some(fee_bps) = self.fee_bps {
+            if fee_bps > 10_000 {
+                return Err(AppError::validation(format!(
+                    "dex.fee_bps must be <= 10000 (100%), got {fee_bps}"
+                )));
+            }
+        }
+
         if let Some(factory) = &self.contracts.factory {
             require_non_empty("dex.contracts.factory", factory)?;
         }
 
         if let Some(quoter) = &self.contracts.quoter {
             require_non_empty("dex.contracts.quoter", quoter)?;
-        }
-
-        if let Some(abi_dir) = &self.assets.abi_dir {
-            require_path("dex.assets.abi_dir", abi_dir)?;
         }
 
         if let Some(artifacts_dir) = &self.assets.artifacts_dir {
