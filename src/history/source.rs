@@ -1,7 +1,9 @@
 use crate::{
     config::HistorySourceConfig,
     error::AppResult,
-    history::{jsonl::JsonlSource, rpc_range::RpcRangeSource},
+    history::{
+        fork_replay::ForkReplaySource, jsonl::JsonlSource, rpc_range::RpcRangeSource,
+    },
     types::BlockSwaps,
 };
 
@@ -23,6 +25,7 @@ pub trait SwapInputSource {
 pub enum HistoryInputSource {
     Jsonl(JsonlSource),
     RpcRange(RpcRangeSource),
+    ForkReplay(ForkReplaySource),
 }
 
 pub fn build_history_source(config: &HistorySourceConfig) -> AppResult<HistoryInputSource> {
@@ -33,6 +36,9 @@ pub fn build_history_source(config: &HistorySourceConfig) -> AppResult<HistoryIn
         HistorySourceConfig::RpcRange { .. } => Ok(HistoryInputSource::RpcRange(
             RpcRangeSource::from_config(config)?,
         )),
+        HistorySourceConfig::ForkReplay { .. } => Ok(HistoryInputSource::ForkReplay(
+            ForkReplaySource::from_config(config)?,
+        )),
     }
 }
 
@@ -41,6 +47,7 @@ impl SwapInputSource for HistoryInputSource {
         match self {
             Self::Jsonl(source) => source.next_block(),
             Self::RpcRange(source) => source.next_block(),
+            Self::ForkReplay(source) => source.next_block(),
         }
     }
 }
