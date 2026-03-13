@@ -11,6 +11,8 @@ pub struct TxRequest {
 pub struct CallRequest {
     pub to: String,
     pub data: Vec<u8>,
+    /// Optional ETH value to attach (used for simulating payable calls like swapExactETHForTokens).
+    pub value: Option<u128>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

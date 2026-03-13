@@ -15,9 +15,15 @@ use crate::{
 };
 
 const DEFAULT_HOST: &str = "127.0.0.1";
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
-const RECEIPT_TIMEOUT: Duration = Duration::from_secs(10);
-const POLL_INTERVAL: Duration = Duration::from_millis(100);
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const RECEIPT_TIMEOUT: Duration = Duration::from_secs(60);
+const POLL_INTERVAL: Duration = Duration::from_millis(200);
+
+#[derive(Debug, Clone, Default)]
+pub struct ForkConfig {
+    pub fork_url: String,
+    pub fork_block_number: Option<u64>,
+}
 
 #[derive(Debug)]
 pub struct AnvilBackend {
@@ -30,21 +36,44 @@ pub struct AnvilBackend {
 
 impl AnvilBackend {
     pub fn new() -> AppResult<Self> {
-        Self::spawn()
+        Self::spawn_inner(None)
+    }
+
+    pub fn new_forked(fork: ForkConfig) -> AppResult<Self> {
+        Self::spawn_inner(Some(fork))
     }
 
     pub fn spawn() -> AppResult<Self> {
+        Self::spawn_inner(None)
+    }
+
+    fn spawn_inner(fork: Option<ForkConfig>) -> AppResult<Self> {
         let port = pick_free_port()?;
         let rpc_url = format!("http://{DEFAULT_HOST}:{port}");
 
-        let child = Command::new(anvil_binary())
-            .arg("--host")
+        let mut cmd = Command::new(anvil_binary());
+        cmd.arg("--host")
             .arg(DEFAULT_HOST)
             .arg("--port")
             .arg(port.to_string())
             .arg("-q")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+
+        if let Some(ref fork_cfg) = fork {
+            if fork_cfg.fork_url.is_empty() {
+                return Err(AppError::validation(
+                    "fork_url must not be empty when using fork mode",
+                ));
+            }
+            cmd.arg("--fork-url").arg(&fork_cfg.fork_url);
+
+            if let Some(block) = fork_cfg.fork_block_number {
+                cmd.arg("--fork-block-number").arg(block.to_string());
+            }
+        }
+
+        let child = cmd
             .spawn()
             .map_err(|source| AppError::backend(format!("failed to spawn anvil: {source}")))?;
 
@@ -224,16 +253,19 @@ impl EvmBackend for AnvilBackend {
     }
 
     fn call(&mut self, request: CallRequest) -> AppResult<CallResponse> {
+        let mut call_obj = json!({
+            "from": self.default_sender,
+            "to": request.to,
+            "data": encode_hex(&request.data),
+        });
+        if let Some(value) = request.value {
+            if value > 0 {
+                call_obj["value"] = json!(format!("0x{:x}", value));
+            }
+        }
         let result = self.rpc(
             "eth_call",
-            json!([
-                {
-                    "from": self.default_sender,
-                    "to": request.to,
-                    "data": encode_hex(&request.data),
-                },
-                "latest"
-            ]),
+            json!([call_obj, "latest"]),
         )?;
 
         Ok(CallResponse {
