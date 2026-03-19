@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use crate::{
     backend::evm::{EvmBackend, TxRequest},
     config::DexConfig,
-    dex::traits::DexSwapAdapter,
+    dex::traits::{compute_effective_amount_in, DexSwapAdapter},
     error::{AppError, AppResult},
     types::{SwapExecutionResult, SwapRequest, SwapStatus},
 };
@@ -12,6 +12,7 @@ use crate::{
 pub struct V2Adapter {
     config: DexConfig,
     supported_tokens: BTreeSet<String>,
+    fee_bps: u64,
 }
 
 impl V2Adapter {
@@ -22,9 +23,12 @@ impl V2Adapter {
             .map(|token| token.address.to_ascii_lowercase())
             .collect();
 
+        let fee_bps = config.fee_bps.unwrap_or(0);
+
         Self {
             config,
             supported_tokens,
+            fee_bps,
         }
     }
 
@@ -32,10 +36,10 @@ impl V2Adapter {
         &self.config
     }
 
-    fn encode_swap_call(&self, swap: &SwapRequest) -> Vec<u8> {
+    fn encode_swap_call(&self, swap: &SwapRequest, effective_amount_in: &str) -> Vec<u8> {
         format!(
             "swap_exact_input|sender={}|token_in={}|token_out={}|amount_in={}|min_amount_out={}",
-            swap.sender, swap.token_in, swap.token_out, swap.amount_in, swap.min_amount_out
+            swap.sender, swap.token_in, swap.token_out, effective_amount_in, swap.min_amount_out
         )
         .into_bytes()
     }
@@ -48,15 +52,30 @@ impl V2Adapter {
         gas_used: Option<u64>,
         payload: &[u8],
         fallback_error: Option<String>,
+        fee_amount: String,
     ) -> SwapExecutionResult {
         if success {
+            let amount_out = decode_non_empty_utf8(payload);
+            // Profit for the DEX = fee collected from the trader.
+            let profit = if fee_amount == "0" {
+                None
+            } else {
+                Some(fee_amount.clone())
+            };
+            let fee_opt = if fee_amount == "0" {
+                None
+            } else {
+                Some(fee_amount)
+            };
             SwapExecutionResult {
                 block_number: swap.block_number,
                 swap_index,
                 status: SwapStatus::Success,
-                amount_out: decode_non_empty_utf8(payload),
+                amount_out,
                 gas_used,
                 error: None,
+                fee_amount: fee_opt,
+                profit,
             }
         } else {
             SwapExecutionResult {
@@ -66,6 +85,8 @@ impl V2Adapter {
                 amount_out: None,
                 gas_used,
                 error: fallback_error.or_else(|| decode_non_empty_utf8(payload)),
+                fee_amount: None,
+                profit: None,
             }
         }
     }
@@ -83,6 +104,10 @@ impl DexSwapAdapter for V2Adapter {
         }
 
         Ok(Self::new(config))
+    }
+
+    fn fee_bps(&self) -> u64 {
+        self.fee_bps
     }
 
     fn validate_swap(&self, swap: &SwapRequest) -> AppResult<()> {
@@ -124,9 +149,18 @@ impl DexSwapAdapter for V2Adapter {
     ) -> AppResult<SwapExecutionResult> {
         self.validate_swap(swap)?;
 
+        // Deduct fee from amount_in BEFORE sending to the router.
+        let (effective_amount_in, fee_amount) =
+            compute_effective_amount_in(&swap.amount_in, self.fee_bps).ok_or_else(|| {
+                AppError::validation(format!(
+                    "cannot parse amount_in `{}` for fee computation",
+                    swap.amount_in
+                ))
+            })?;
+
         let tx_request = TxRequest {
             to: self.config.contracts.router.clone(),
-            data: self.encode_swap_call(swap),
+            data: self.encode_swap_call(swap, &effective_amount_in),
             value: 0,
         };
 
@@ -138,6 +172,7 @@ impl DexSwapAdapter for V2Adapter {
                 Some(response.gas_used),
                 &response.output,
                 (!response.success).then(|| "swap reverted".to_string()),
+                fee_amount,
             )),
             Err(error) => Ok(self.normalize_execution(
                 swap,
@@ -146,6 +181,7 @@ impl DexSwapAdapter for V2Adapter {
                 None,
                 &[],
                 Some(error.to_string()),
+                fee_amount,
             )),
         }
     }
