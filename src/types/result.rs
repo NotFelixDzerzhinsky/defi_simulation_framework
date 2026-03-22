@@ -17,6 +17,11 @@ pub struct RunSummary {
     pub reverts: u64,
     pub skipped: u64,
     pub total_gas_used: u64,
+    /// Sum of all `fee_amount` values across successful swaps (decimal string).
+    pub total_fees: String,
+    /// Sum of all `profit` values across successful swaps (decimal string).
+    /// Since profit = fee_amount (DEX revenue), this equals `total_fees`.
+    pub total_profit: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -55,6 +60,13 @@ impl RunSummary {
             }
 
             self.total_gas_used += swap.gas_used.unwrap_or_default();
+
+            if let Some(fee) = &swap.fee_amount {
+                self.total_fees = add_decimal_strings(&self.total_fees, fee);
+            }
+            if let Some(profit) = &swap.profit {
+                self.total_profit = add_decimal_strings(&self.total_profit, profit);
+            }
         }
     }
 }
@@ -65,3 +77,15 @@ impl RunReport {
         self.blocks.push(block);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Decimal string arithmetic helpers
+// ---------------------------------------------------------------------------
+
+/// Add two non-negative decimal strings. Falls back to "0" on parse error.
+pub fn add_decimal_strings(a: &str, b: &str) -> String {
+    let av: u128 = a.trim().parse().unwrap_or(0);
+    let bv: u128 = b.trim().parse().unwrap_or(0);
+    av.saturating_add(bv).to_string()
+}
+

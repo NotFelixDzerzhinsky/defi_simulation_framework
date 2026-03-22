@@ -39,6 +39,16 @@ pub struct SwapExecutionResult {
     pub gas_used: Option<u64>,
     #[serde(default)]
     pub error: Option<String>,
+    /// Absolute fee deducted from `amount_in` **before** the swap is sent to the
+    /// router: `fee = amount_in * fee_bps / 10000`.  The router receives
+    /// `effective_amount_in = amount_in - fee`.
+    /// `None` when fee_bps is 0 or the swap did not succeed.
+    #[serde(default)]
+    pub fee_amount: Option<String>,
+    /// DEX revenue from this swap — equals `fee_amount`.
+    /// `None` when fee_bps is 0 or the swap did not succeed.
+    #[serde(default)]
+    pub profit: Option<String>,
 }
 
 impl SwapRequest {
