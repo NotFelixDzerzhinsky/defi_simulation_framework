@@ -114,6 +114,7 @@ fn sample_custom_config() -> DexConfig {
             factory: None,
             quoter: None,
         },
+        fee_bps: None,
         assets: DexAssets::default(),
         tokens: Vec::new(),
         protocol: Default::default(),
@@ -129,6 +130,7 @@ fn sample_builtin_config() -> DexConfig {
             factory: Some("0x2222222222222222222222222222222222222222".to_string()),
             quoter: None,
         },
+        fee_bps: None,
         assets: DexAssets::default(),
         tokens: vec![
             dex_sim::config::TokenConfig {
