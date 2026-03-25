@@ -1,6 +1,7 @@
 pub mod app;
 pub mod backend;
 pub mod cli;
+pub mod cmd;
 pub mod config;
 pub mod dex;
 pub mod engine;

@@ -35,11 +35,29 @@ impl SwapExecutor {
                     error: Some(
                         "skipped because a previous swap in the block reverted".to_string(),
                     ),
+                    fee_amount: None,
+                    profit: None,
                 });
                 continue;
             }
 
-            let result = adapter.execute_swap(backend, swap, swap_index)?;
+            let result = if continue_on_revert {
+                match adapter.execute_swap(backend, swap, swap_index) {
+                    Ok(r) => r,
+                    Err(error) => SwapExecutionResult {
+                        block_number: block.block_number,
+                        swap_index,
+                        status: SwapStatus::Skipped,
+                        amount_out: None,
+                        gas_used: None,
+                        error: Some(error.to_string()),
+                        fee_amount: None,
+                        profit: None,
+                    },
+                }
+            } else {
+                adapter.execute_swap(backend, swap, swap_index)?
+            };
 
             if matches!(result.status, SwapStatus::Revert) && !continue_on_revert {
                 halt_after_revert = true;

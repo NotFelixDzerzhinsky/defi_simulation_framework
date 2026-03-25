@@ -10,13 +10,15 @@ use crate::{
 
 pub fn render_summary(summary: &RunSummary) -> String {
     format!(
-        "processed_blocks={} total_swaps={} successes={} reverts={} skipped={} total_gas_used={}",
+        "processed_blocks={} total_swaps={} successes={} reverts={} skipped={} total_gas_used={} total_fees={} total_profit={}",
         summary.processed_blocks,
         summary.total_swaps,
         summary.successes,
         summary.reverts,
         summary.skipped,
-        summary.total_gas_used
+        summary.total_gas_used,
+        summary.total_fees,
+        summary.total_profit,
     )
 }
 
