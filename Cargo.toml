@@ -20,6 +20,10 @@ thiserror = "1"
 toml = "0.8"
 ureq = { version = "2.10", features = ["json"] }
 
+# ABI encoding/decoding for real Ethereum transactions
+alloy-primitives = { version = "0.8", default-features = false, features = ["std"] }
+alloy-sol-types = { version = "0.8", default-features = false, features = ["std"] }
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

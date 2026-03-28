@@ -54,6 +54,7 @@ fn call_works_on_real_anvil() {
         .call(CallRequest {
             to: recipient,
             data: Vec::new(),
+            value: None,
         })
         .expect("eth_call should succeed");
 

@@ -187,7 +187,58 @@ not-json
 }
 
 #[test]
-fn e2e_jsonl_run_fails_with_clear_error_for_swap_not_supported_by_dex() {
+fn e2e_jsonl_run_fails_with_clear_error_for_swap_not_supported_by_dex_when_strict() {
+    // When continue_on_revert = false (default), an unknown token is a fatal error.
+    let tempdir = tempdir().expect("tempdir should be created");
+    let dex_path = tempdir.path().join("dex.toml");
+    let history_path = tempdir.path().join("history.toml");
+    let jsonl_path = tempdir.path().join("swaps.jsonl");
+    let output_dir = tempdir.path().join("out");
+
+    fs::write(&dex_path, sample_builtin_dex_toml()).expect("dex config should be written");
+    fs::write(
+        &history_path,
+        format!(
+            r#"
+[source]
+kind = "jsonl"
+path = "{}"
+
+[execution]
+mine_after_block = true
+continue_on_revert = false
+"#,
+            jsonl_path.display()
+        ),
+    )
+    .expect("history config should be written");
+    fs::write(
+        &jsonl_path,
+        r#"{"block_number":100,"sender":"0xcccccccccccccccccccccccccccccccccccccccc","token_in":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token_out":"0x9999999999999999999999999999999999999999","amount_in":"100","min_amount_out":"91"}
+"#,
+    )
+    .expect("jsonl should be written");
+
+    let mut command = Command::cargo_bin("dex-sim").expect("binary should build");
+    command
+        .args([
+            "--dex",
+            &dex_path.display().to_string(),
+            "--history",
+            &history_path.display().to_string(),
+            "--output-dir",
+            &output_dir.display().to_string(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("token_out"))
+        .stderr(predicate::str::contains("is not listed in dex config"));
+}
+
+#[test]
+fn e2e_jsonl_run_skips_unknown_token_swap_when_continue_on_revert_is_true() {
+    // When continue_on_revert = true, an unknown token produces a Skipped result
+    // instead of aborting the whole run.
     let tempdir = tempdir().expect("tempdir should be created");
     let dex_path = tempdir.path().join("dex.toml");
     let history_path = tempdir.path().join("history.toml");
@@ -229,9 +280,8 @@ continue_on_revert = true
             &output_dir.display().to_string(),
         ])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("token_out"))
-        .stderr(predicate::str::contains("is not listed in dex config"));
+        .success()
+        .stdout(predicate::str::contains("skipped=1"));
 }
 
 #[test]

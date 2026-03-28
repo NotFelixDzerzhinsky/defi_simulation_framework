@@ -37,6 +37,7 @@ fn call_records_request_and_returns_scripted_response() {
     let request = CallRequest {
         to: "0x2222222222222222222222222222222222222222".to_string(),
         data: vec![0xca, 0xfe],
+        value: None,
     };
 
     backend.queue_call_response(CallResponse {
@@ -101,6 +102,7 @@ fn backend_can_return_scripted_errors() {
         .call(CallRequest {
             to: "0x4444444444444444444444444444444444444444".to_string(),
             data: vec![],
+            value: None,
         })
         .expect_err("call should fail");
     let mine_error = backend.mine_block().expect_err("mine should fail");

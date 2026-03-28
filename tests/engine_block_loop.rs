@@ -164,6 +164,7 @@ fn sample_dex_config() -> DexConfig {
             factory: Some("0x2222222222222222222222222222222222222222".to_string()),
             quoter: None,
         },
+        fee_bps: None,
         assets: DexAssets::default(),
         tokens: vec![
             TokenConfig {

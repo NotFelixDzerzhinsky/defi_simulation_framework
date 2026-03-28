@@ -68,6 +68,8 @@ fn sample_report() -> RunReport {
                 amount_out: Some("91".to_string()),
                 gas_used: Some(11_000),
                 error: None,
+                fee_amount: None,
+                profit: None,
             },
             SwapExecutionResult {
                 block_number: 100,
@@ -76,6 +78,8 @@ fn sample_report() -> RunReport {
                 amount_out: None,
                 gas_used: None,
                 error: Some("router revert".to_string()),
+                fee_amount: None,
+                profit: None,
             },
         ],
     });
@@ -89,6 +93,8 @@ fn sample_report() -> RunReport {
             amount_out: None,
             gas_used: None,
             error: Some("skipped because a previous swap in the block reverted".to_string()),
+            fee_amount: None,
+            profit: None,
         }],
     });
 
